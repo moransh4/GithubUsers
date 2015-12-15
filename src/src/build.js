@@ -9,6 +9,8 @@ var h = require('../../h.js');
 
 var vnode,
 
+ findUser = false,
+
  nextKey = 0,
 
  margin = 8,
@@ -17,24 +19,68 @@ var vnode,
 
  data = [],
 
+ errors =[],
 
-   user={
+ errorIndex= 0,
+
+    followers="",
+
+  user={
     name : "",
-    url:""
+    url:"",
+    followers:""
   };
 
 
 
+  //function checkStatus(response) {
+  //  if (response.status >= 200 && response.status < 300) {
+  //    return response
+  //  } else {
+  //    var error = new Error(response.statusText);
+  //    error.response = response;
+  //    throw error
+  //  }
+  //}
+  //
+  //function parseJSON(response) {
+  //  return response.json()
+  //}
+  //
 
 
-function add() {
+  function view(data) {
+    return h('div',
+        [
+          h('h1', 'GitHub Users'),
+          h('input', { on:  {input: enterUser}}),
+          h('a.btn.add', { on: { click: add } }, 'Fetch!'),
+          h('h2', "Hold tight!"),
+          h('p.name' , "We're about to fetch: \"\""  ),
+          h('div.list', { style: { height: totalHeight + 'px' } },
+              findUser===true ?  data.map(userView) : data.map(errorView))]);
+  }
 
-  var url = user.url;
-
-  var result = fetch(url);
 
 
-  result.then(function(response) {
+  var enterUser = function (e)  {
+    var username = e.target.value;
+    var name = document.getElementsByClassName('name')[0];
+    name.innerHTML  = "We're about to fetch: " +'"'+username+'"';
+
+  };
+
+
+
+  function add() {
+
+    user.name = document.getElementsByTagName('input')[0].value;
+    user.url = "https://api.github.com/search/users?q=" + user.name;
+
+    var result = fetch(user.url);
+
+
+     result.then(function(response) {
     console.log('response', response);
     console.log('header', response.headers.get('Content-Type'));
 
@@ -42,6 +88,12 @@ function add() {
   }).then(function(text) {
 
     search_user(text);
+
+
+    console.log("find user?:"+findUser);
+
+    if (findUser===false){
+      error();}
 
   }).catch(function(ex) {
     console.log('failed', ex)
@@ -51,94 +103,189 @@ function add() {
 
 }
 
-  function search_user(text){
-    var users = JSON.parse(text).items;
-    for (var i=0 ; i<users.length ; i++){
-      if(users[i].login === user.name){
-        data[nextKey]  = {id : users[i].id , username: users[i].login, img: users[i].avatar_url ,elmHeight:30+"px"  };
-        nextKey++;
-        render();
-        render();
-      }
-    }
+  function searchDetails(){
+    var userFollowers = "https://api.github.com/users/"+user.name+"/followers";
+    console.log(userFollowers);
+    var result = fetch(userFollowers);
 
+    result.then(function(response) {
+      return response.text()
+
+    }).then(function(text) {
+      getFollowers(text);
+
+    }).catch(function(ex) {
+      console.log('failed', ex)
+    });
+
+
+    //fetch(userFollowers)
+    //    .then(checkStatus)
+    //    .then(parseJSON)
+    //    .then(function(data) {
+    //      console.log('request succeeded with JSON response', data);
+    //      getFollowers(data);
+    //    }).catch(function(error) {
+    //      console.log('request failed', error)
+    //    })
+  }
+
+  function getFollowers(text){
+    user.followers = JSON.parse(text).length;
+    //user.followers = text.length;
+    console.log("Followers:"+user.followers);
 
   }
 
-function remove(movie) {
+
+
+  function search_user(text){
+    findUser = false;
+    var users = JSON.parse(text).items;
+    for (var i=0 ; i<users.length ; i++){
+      if(users[i].login === user.name){
+        findUser = true;
+        console.log(users[i]);
+        searchDetails();
+        data[nextKey]  = {id : users[i].id , username: users[i].login, img: users[i].avatar_url , site : users[i].html_url ,
+                         userFollowers: user.followers ,  elmHeight:30+"px"  };
+        nextKey++;
+        render();
+        break;
+      }
+    }
+
+  }
+
+  function error(){
+    errors[errorIndex] = {username : user.name , elmHeight:20+"px" , index : errorIndex};
+    errorIndex++;
+    render();
+  }
+
+
+
+function remove(user) {
+  findUser===true ?
   data = data.filter(function (m) {
-    return m !== movie;
-  });
+    return m !== user;}):
+   errors = errors.filter(function (m) {
+    return m !== user } );
   render();
 }
+
+
+  function errorView(error){
+    return h('div.row', {
+      key: error.index,
+      style: {
+        opacity: '0', transform: 'translate(-200px)',
+        delayed: {transform: 'translateY(' + error.offset + 'px)', opacity: '1'},
+        remove: {opacity: '0', transform: 'translateY(' + error.offset + 'px) translateX(200px)'}
+      },
+      hook: {
+        insert: function insert(vnode) {
+          error.elmHeight = vnode.elm.offsetHeight;
+        }
+      }
+    }, [ h('img' ,{props: {src: ("../../img/warning.png"), width: 40, height: 40},
+                   style: {float: 'left' , marginRight: 8+"px"}} ),
+      h('p' ,  "Error Fetching " +'"'+error.username+'"'+" from Github - User Not Found! "),
+      h('img#remove', {
+            props: {src: ("../../img/delete.png"), width: 30, height: 30},
+            style: {position: 'absolute', top: 25 + "px", right: 20 + "px", cursor: 'pointer'} ,
+            on: {click: [remove,error] }}
+      )])}
 
 
 
 function userView(user) {
 
-
-    return h('div.row', {
-      key: user.id,
-      style: {
-        opacity: '0', transform: 'translate(-200px)',
-        delayed: {transform: 'translateY(' + user.offset + 'px)', opacity: '1'},
-        remove: {opacity: '0', transform: 'translateY(' + user.offset + 'px) translateX(200px)'}
-      },
-      hook: {
-        insert: function insert(vnode) {
-          user.elmHeight = vnode.elm.offsetHeight;
-        }
+  return h('div.row', {
+    key: user.id,
+    style: {
+      opacity: '0', transform: 'translate(-200px)',
+      delayed: {transform: 'translateY(' + user.offset + 'px)', opacity: '1'},
+      remove: {opacity: '0', transform: 'translateY(' + user.offset + 'px) translateX(200px)'}
+    },
+    hook: {
+      insert: function insert(vnode) {
+        user.elmHeight = vnode.elm.offsetHeight;
       }
-    }, [h('img', {props: {src: user.img, width: 100, height: 100}, style: {float: 'left'}}),
-      h('div', {style: {fontWeight: 'bold', float: 'left'}}, "User Name : " + user.username),
-      h('div', {style: {fontWeight: 'bold', float: 'left'}}, "Id: " + user.id),
-      h('img', {props: {src: ("../../img/face.png")}}),
-      //{ on: { click: h('img' , {props: {src: ("../../img/face.png")}}} }),
-      h('div.btn.rm-btn', {on: {click: [remove, user]}}, 'x')]);
+    }
+  }, [h('img', {props: {src: user.img, width: 100, height: 100},
+               style: {float: 'left', marginRight: 8 + "px"}}),
+    h('div', {style: {fontWeight: 'bold', float: 'left'}}, "Name : " + user.username),
+    h('div', {style: {fontWeight: 'bold', float: 'left'}}, "Id: " + user.id),
+    h('div' ,{style: {fontWeight: 'bold', position: 'absolute', bottom:60+"px" , left:123+"px"}}, "Followers: " + user.userFollowers),
+    h('a', {
+      props: {href: user.site, target: "_blank"},
+      style: {position: 'absolute', bottom: 16 + "px", left: 123 + "px"}
+    }, user.site),
+    h('img#like', {
+      props: {src: ("../../img/face.png"), width: 40, height: 40},
+      style: {position: 'absolute', bottom: 10 + "px", right: 10 + "px", cursor: 'pointer'} ,on: {click: likeUser }}
+    ),
+    h('div.btn.rm-btn', {on: {click: [remove, user]}}, 'x')]);
 
 }
 
+function likeUser(e){
+  console.log("CHANGE SMILE!!!");
+
+  e.target.src = "../../img/face.png" ? "../../img/smiling.png" : "../../img/face.png" ;
+
+  //if(e.target.src = "../../img/face.png")
+  //  e.target.src = "../../img/smiling.png";
+  //
+  // else {e.target.src = "../../img/face.png"};
+
+}
 
 function render() {
-  data = data.reduce(function (acc, m) {
-    var last = acc[acc.length - 1];
-    m.offset = last ? last.offset + last.elmHeight + margin : margin;
-    return acc.concat(m);
-  }, []);
-  totalHeight = data[data.length - 1].offset + data[data.length - 1].elmHeight;
-  vnode = patch(vnode, view(data));
-}
 
-
-  var sharedHandler = {
-
-  change: function(e){
-    var usrename= e.target.value;
-       user.name=  usrename;
-       user.url = "https://api.github.com/search/users?q="+ usrename;
-
-       console.log('You choose: ' + usrename);
+  if (findUser===true)
+  {
+    data = data.reduce(function (acc, m) {
+      var last = acc[acc.length -1];
+      m.offset = last ? last.offset + last.elmHeight + margin : margin;
+      return acc.concat(m);
+    }, []);
+  }
+else
+  {
+    errors = errors.reduce(function (acc, m) {
+      var last = acc[acc.length - 1];
+      m.offset = last ? last.offset + last.elmHeight + margin : margin;
+      return acc.concat(m);
+    }, []);
   }
 
+  totalHeight =  findUser===true ?
+  data[data.length - 1].offset + data[data.length - 1].elmHeight :
+  errors[errors.length - 1].offset + errors[errors.length - 1].elmHeight;
 
-  };
-
-
-
-  function view(data) {
-    return h('div',
-      [
-        h('h1', 'GitHub Users'),
-          h('input', { on: sharedHandler}),
-            h('a.btn.add', { on: { click: add } }, 'Fetch!'),
-          h('h2', "Hold tight!"),
-          h('p' , "We're about to fetch: "+ user.name ),
-        h('div.list', { style: { height: totalHeight + 'px' } }, data.map(userView) )]);
+  vnode = findUser===true ?
+      patch(vnode, view(data))  :  patch(vnode, view(errors)) ;
 }
+
+
+  //function renderError() {
+  //  errors = errors.reduce(function (acc, m) {
+  //    var last = acc[acc.length - 1];
+  //    m.offset = last ? last.offset + last.elmHeight + margin : margin;
+  //    return acc.concat(m);
+  //  }, []);
+  //  totalHeight = errors[errors.length - 1].offset + errors[errors.length - 1].elmHeight;
+  //  vnode = patch(vnode, view(errors));
+  //}
+
+
 
 window.addEventListener('DOMContentLoaded', function () {
   var container = document.getElementById('container');
-  vnode = patch(container, view(data));
+  vnode = patch(container, findUser===true ?  view(data) : view(errors));
+      //view(data));
   render();
 });
 
