@@ -13,7 +13,8 @@
   "devDependencies": {
     "benchmark": "^1.0.0",
     "fake-raf": "0.0.1",
-    "knuth-shuffle": "^1.0.1"
+    "knuth-shuffle": "^1.0.1",
+    "nodemon": "^1.8.1"
   },
   "scripts": {
     "test": "testem"
